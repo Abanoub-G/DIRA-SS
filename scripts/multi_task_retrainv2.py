@@ -130,20 +130,23 @@ def main():
 	# accuracies = []
 	print(model_multi)
 	# Evaluate model
-	_, eval_accuracy_orig   = top1Accuracy(model=model, test_loader=testloader_clas, device=device, criterion=None)
+	_, eval_accuracy_clas_single   = top1Accuracy(model=model, test_loader=testloader_clas, device=device, criterion=None)
+	_, eval_accuracy_clas_multi   = top1Accuracy(model=model_multi, test_loader=testloader_clas, device=device, criterion=None)
 	model_multi.use_rotation_head()
-	_, eval_accuracy_recon  = top1Accuracy(model=model_multi, test_loader=testloader_rot, device=device, criterion=None)
-	# _, eval_accuracy_withoutRot, eval_rot_accuracy_withoutRot = top1Accuracy_rotation(model=model_multi, test_loader=testloader, device=device, criterion=None)
-	# _, eval_accuracy_withRot, eval_rot_accuracy_withRot = top1Accuracy_rotation(model=model_multi, test_loader=testloader_withRot, device=device, criterion=None)
-	# _, eval_accuracy = top1Accuracy(model=model, test_loader=testloader, device=device, criterion=None)
-	print("Model Classificaiton Accuray on original dataset - ORIGINAL = ",eval_accuracy_orig)
-	print("Model Classificaiton Accuray on original dataset - RECONSTRUCTED = ",eval_accuracy_recon)
-	print("Model Classificaiton Accuray on original dataset = ",eval_accuracy_withoutRot)
-	print("Model Classificaiton Accuray on rotated  dataset = ",eval_accuracy_withRot)
-	print("Model Rotation Accuray on original dataset = ",eval_rot_accuracy_withoutRot)
-	print("Model Rotation Accuray on rotated  dataset = ",eval_rot_accuracy_withRot)
+	_, eval_accuracy_rot_multi  = top1Accuracy(model=model_multi, test_loader=testloader_rot, device=device, criterion=None)
 	
-	# STOPEED AT LOOKING INTO REPLACING THE OUTER LAYER WITHOUT LOOSING PERFORMANCE 
+	print("Single-Head Model Classificaiton Accuray on original dataset = ",eval_accuracy_clas_single)
+	print("Multiple-Head Model Classificaiton Accuray on original dataset = ",eval_accuracy_clas_multi)
+	print("Multiple-Head Model Rotation Accuray on original dataset = ",eval_accuracy_rot_multi)
+
+
+	STOPEED AT LOOKING INTO:
+		- Fine Tuning the new head parameters based on the rotation dataset, without chaning the main model parameters
+		- Reassess the model after this fintuning. The classificaiton head should be the same but the rotation one might improve.
+		- You can try to fine tune the main parameters as well using a low learning rate to improve accuracy on rotation detection.
+		- Retrain on new domain based on rotation task only. Measure accuracy. 
+
+	
 
 	# Initiate dictionaries for regularisation using EWC	
 	fisher_dict = {}
