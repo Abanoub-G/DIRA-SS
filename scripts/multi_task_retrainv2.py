@@ -17,6 +17,8 @@ from utils.dataloaders import pytorch_dataloader, pytorch_rotation_dataloader, c
 
 from utils.multi_task_model import model_selection
 
+from utils.model import train_model
+
 from metrics.accuracy.topAccuracy import top1Accuracy, top1Accuracy_rotation
 
 from methods.EWC_multi import on_task_update, train_model_ewc
@@ -119,6 +121,7 @@ def main():
 	# Load model
 	model = model_selection(model_selection_flag=MODEL_SELECTION_FLAG, model_dir=MODEL_DIR, model_choice=MODEL_CHOICE, model_variant=MODEL_VARIANT, saved_model_filepath=MODEL_FILEPATH, num_classes=NUM_CLASSES, device=device, mutli_selection_flag = False)
 	model_multi = model_selection(model_selection_flag=MODEL_SELECTION_FLAG, model_dir=MODEL_DIR, model_choice=MODEL_CHOICE, model_variant=MODEL_VARIANT, saved_model_filepath=MODEL_FILEPATH, num_classes=NUM_CLASSES, device=device, mutli_selection_flag = True)
+	model_multi_copy = copy.deepcopy(model_multi)
 	print("Progress: Model has been setup.")
 
 	# Setup original dataset
@@ -132,6 +135,7 @@ def main():
 	# Evaluate model
 	_, eval_accuracy_clas_single   = top1Accuracy(model=model, test_loader=testloader_clas, device=device, criterion=None)
 	_, eval_accuracy_clas_multi   = top1Accuracy(model=model_multi, test_loader=testloader_clas, device=device, criterion=None)
+	_, eval_accuracy_clas_multi_copy   = top1Accuracy(model=model_multi_copy, test_loader=testloader_clas, device=device, criterion=None)
 	model_multi.use_rotation_head()
 	_, eval_accuracy_rot_multi  = top1Accuracy(model=model_multi, test_loader=testloader_rot, device=device, criterion=None)
 	
@@ -140,11 +144,91 @@ def main():
 	print("Multiple-Head Model Rotation Accuray on original dataset = ",eval_accuracy_rot_multi)
 
 
-	STOPEED AT LOOKING INTO:
-		- Fine Tuning the new head parameters based on the rotation dataset, without chaning the main model parameters
-		- Reassess the model after this fintuning. The classificaiton head should be the same but the rotation one might improve.
-		- You can try to fine tune the main parameters as well using a low learning rate to improve accuracy on rotation detection.
-		- Retrain on new domain based on rotation task only. Measure accuracy. 
+	# Train the Rotation Head: Freeze all layers except the layer4, avgpool and fc layers which should be set to the Rotation head.
+	for param in model_multi.parameters():
+		param.requires_grad = False
+
+	# for param in model_multi.resnet.layer4.parameters():
+	# 	param.requires_grad = True
+
+	# for param in model_multi.resnet.avgpool.parameters():
+	# 	param.requires_grad = True
+
+	# print("Classificaiton")
+	# for param in model_multi.classification_head.parameters():#resnet.fc.parameters():
+	# 	print(param)
+	# 	input("press enter to continue")
+	# 	param.requires_grad = True
+
+	print("Rotation")
+	# flag_temp = True
+	for param in model_multi.rotation_head.parameters():#resnet.fc.parameters():
+		print(param)
+		# if flag_temp:
+		# 	flag_temp= False
+		# 	continue
+		input("press enter to continue")
+		param.requires_grad = True
+
+	# Fine Tune model
+	model_multi = train_model(model=model_multi, train_loader=trainloader_rot, test_loader=testloader_rot, device=device, learning_rate=1e-2, num_epochs=2)
+
+	# Evaluate model
+	model_multi.use_classification_head()
+	_, eval_accuracy_clas_single   = top1Accuracy(model=model, test_loader=testloader_clas, device=device, criterion=None)
+	_, eval_accuracy_clas_multi   = top1Accuracy(model=model_multi, test_loader=testloader_clas, device=device, criterion=None)
+	model_multi.use_rotation_head()
+	_, eval_accuracy_rot_multi  = top1Accuracy(model=model_multi, test_loader=testloader_rot, device=device, criterion=None)
+	
+	print("Single-Head Model Classificaiton Accuray on original dataset = ",eval_accuracy_clas_single)
+	print("Multiple-Head Model Classificaiton Accuray on original dataset = ",eval_accuracy_clas_multi)
+	print("Multiple-Head Model Rotation Accuray on original dataset = ",eval_accuracy_rot_multi)
+
+	# print("Classificaiton")
+	# for param in model_multi.classification_head.parameters():#resnet.fc.parameters():
+	# 	print(param)
+	# 	input("press enter to continue")
+	# 	param.requires_grad = True
+
+	# print("Rotation")
+	# flag_temp = True
+	for param in model_multi.rotation_head.parameters():#resnet.fc.parameters():
+		print(param)
+		# input("press enter to continue")
+		# param.requires_grad = True
+
+	model_multi.use_rotation_head()
+	model_multi_copy.use_rotation_head()
+	print("================ Change in Rotation head")
+	for (name1, param1), (name2, param2) in zip(model_multi_copy.named_parameters(), model_multi.named_parameters()):
+		if param1.size() == param2.size():
+			diff = torch.abs(param1 - param2)
+			# print(f"Parameter Name: {name1}")
+			# print(f"Max Absolute Difference: {diff.max()}")
+			# print(f"Min Absolute Difference: {diff.min()}")
+			# print(f"Mean Absolute Difference: {diff.mean()}")
+			# print("-----")
+	
+	print("================ Change in Classificaiton head")
+	model_multi.use_classification_head()
+	model_multi_copy.use_classification_head()
+	for (name1, param1), (name2, param2) in zip(model_multi_copy.named_parameters(), model_multi.named_parameters()):
+		if param1.size() == param2.size():
+			diff = torch.abs(param1 - param2)
+			# print(f"Parameter Name: {name1}")
+			# print(f"Max Absolute Difference: {diff.max()}")
+			# print(f"Min Absolute Difference: {diff.min()}")
+			# print(f"Mean Absolute Difference: {diff.mean()}")
+			# print("-----")
+
+	
+	# Stopped at running this script
+
+	# STOPEED AT LOOKING INTO:
+	# 	- Fine Tuning the new head parameters based on the rotation dataset, without changing the main model parameters
+	# 	- Reassess the model after this fintuning. The classificaiton head should be the same but the rotation one might improve.
+	# 	- You can try to fine tune the main parameters as well using a low learning rate to improve accuracy on rotation detection.
+	# 	- Retrain on new domain based on rotation task only. Measure accuracy. 
 
 	
 

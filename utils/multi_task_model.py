@@ -10,6 +10,8 @@ from metrics.accuracy.topAccuracy import top1Accuracy, top1Accuracy_rotation
 
 import matplotlib.pyplot as plt
 
+import copy
+
 # Define a multi-task ResNet architecture
 # class MultiTaskResNet(nn.Module):
 #     def __init__(self, model, num_classes, num_rotation_classes=4, classification_layers=512, rotation_layers=512):
@@ -48,14 +50,22 @@ class MultiTaskResNet(nn.Module):
 
         self.n_features = self.resnet.fc.in_features
 
-        
-        self.classification_head = self.resnet.fc
+        # self.classification_layer4 = self.resnet.layer4
+        # self.classification_avgpool = copy.deepcopy(self.resnet.avgpool)
+        self.classification_head = copy.deepcopy(self.resnet.fc)
 
-        self.rotation_head = nn.Sequential(
-                                                        nn.Linear(self.n_features,self.n_features),
-                                                        nn.ReLU(),
-                                                        nn.Linear(self.n_features, num_rotation_classes)
-                                                        )
+        # copy.deepcopy([net.layer3, net.bn, net.relu, net.avgpool])
+        # self.rotation_layer4  = self.resnet.layer4
+        # self.rotation_avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        self.rotation_head    = nn.Linear(self.n_features, num_rotation_classes) 
+
+        # STOPPED At checking if the running mean and standard deviation change during to training and if this is causeing an issue!!.
+
+        # self.rotation_head = nn.Sequential(
+        #                                                 nn.Linear(self.n_features,self.n_features),
+        #                                                 nn.ReLU(),
+        #                                                 nn.Linear(self.n_features, num_rotation_classes)
+        #                                                 )
 
         self.num_classificaiton_classes = num_classes
         self.num_rotation_classes = num_rotation_classes
@@ -68,16 +78,18 @@ class MultiTaskResNet(nn.Module):
         return self.resnet(x)
 
     def use_classification_head(self):
-        # Switch to the original classification head
-        self.resnet.fc = self.classification_head
-        # self.active_head = self.classification_head
-        # self.num_classes = self.num_classificaiton_classes
+        # Switch to the original classification layers
+        # self.resnet.layer4  = self.classification_layer4
+        # self.resnet.avgpool = self.classification_avgpool
+        self.resnet.fc      = self.classification_head
+
 
     def use_rotation_head(self):
-        # Switch to the custom second head
-        self.resnet.fc = self.rotation_head
-        # self.active_head = self.rotation_head
-        # self.num_classes = self.num_rotation_classes
+        # Switch to the rotation layers
+        # self.resnet.layer4  = self.rotation_layer4
+        # self.resnet.avgpool = self.rotation_avgpool
+        self.resnet.fc      = self.rotation_head
+
 
 
 def create_model(model_dir, model_choice, model_variant, num_classes=10, num_rotation_classes=4, classification_layers=512, rotation_layers=512):
@@ -126,96 +138,96 @@ def model_selection(model_selection_flag=0, model_dir="", model_choice="", model
     return model
 
 
-def train_model(model, train_loader, test_loader, device, learning_rate=1e-2, num_epochs=200 ):
+# def train_model(model, train_loader, test_loader, device, learning_rate=1e-2, num_epochs=200 ):
 
-    classification_criterion = nn.CrossEntropyLoss()
-    rotation_criterion = nn.CrossEntropyLoss()
+#     classification_criterion = nn.CrossEntropyLoss()
+#     rotation_criterion = nn.CrossEntropyLoss()
 
-    model.to(device)
+#     model.to(device)
 
-    # It seems that SGD optimizer is better than Adam optimizer for ResNet18 training on CIFAR10.
-    optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=1e-5)
-    # optimizer = optim.Adam(model.parameters(), lr=learning_rate, betas=(0.9, 0.999), eps=1e-08, weight_decay=0, amsgrad=False)
+#     # It seems that SGD optimizer is better than Adam optimizer for ResNet18 training on CIFAR10.
+#     optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=1e-5)
+#     # optimizer = optim.Adam(model.parameters(), lr=learning_rate, betas=(0.9, 0.999), eps=1e-08, weight_decay=0, amsgrad=False)
 
-    # print(model)
-    for epoch in range(num_epochs):
+#     # print(model)
+#     for epoch in range(num_epochs):
 
-        # Training
-        model.train()
+#         # Training
+#         model.train()
 
-        total_classification_loss = 0.0
-        total_rotation_loss = 0.0
+#         total_classification_loss = 0.0
+#         total_rotation_loss = 0.0
 
-        # running_loss = 0
-        # running_corrects = 0
+#         # running_loss = 0
+#         # running_corrects = 0
 
-        for inputs, labels, rotation_labels in train_loader:
-            # print("Model training..")
-            inputs = inputs.to(device)
-            labels = labels.to(device)
-            rotation_labels = rotation_labels.to(device)
+#         for inputs, labels, rotation_labels in train_loader:
+#             # print("Model training..")
+#             inputs = inputs.to(device)
+#             labels = labels.to(device)
+#             rotation_labels = rotation_labels.to(device)
 
-            # zero the parameter gradients
-            optimizer.zero_grad()
+#             # zero the parameter gradients
+#             optimizer.zero_grad()
 
-            # classification_output, rotation_output = model(inputs)
-            classification_output,rotation_output = model(inputs)
-            # print(outputs)
-            # input("I have gone through outputs now")
-            # classification_output = outputs 
-            # rotation_output = outputs
+#             # classification_output, rotation_output = model(inputs)
+#             classification_output,rotation_output = model(inputs)
+#             # print(outputs)
+#             # input("I have gone through outputs now")
+#             # classification_output = outputs 
+#             # rotation_output = outputs
 
-            # Compute classification loss and rotation classification loss
-            classification_loss = classification_criterion(classification_output, labels)
+#             # Compute classification loss and rotation classification loss
+#             classification_loss = classification_criterion(classification_output, labels)
       
 
-            # print(torch.argmax(inputs[:, 0, :, :], dim=1)) STOPEED AT "Modify dataloader to provide rotations and rotation labels. Current error being faced is because of an issue with rotation labels"
-            rotation_loss = rotation_criterion(rotation_output, rotation_labels)
+#             # print(torch.argmax(inputs[:, 0, :, :], dim=1)) STOPEED AT "Modify dataloader to provide rotations and rotation labels. Current error being faced is because of an issue with rotation labels"
+#             rotation_loss = rotation_criterion(rotation_output, rotation_labels)
         
 
-            # Combine the losses with weights (you can adjust these weights as needed)
-            total_loss = classification_loss + 0.5 * rotation_loss
+#             # Combine the losses with weights (you can adjust these weights as needed)
+#             total_loss = classification_loss + 0.5 * rotation_loss
 
-            # Backpropagation and optimization
-            total_loss.backward()
-            optimizer.step()
+#             # Backpropagation and optimization
+#             total_loss.backward()
+#             optimizer.step()
 
-            # forward + backward + optimize
-            # outputs = model(inputs)
-            # _, preds = torch.max(outputs, 1)
-            # loss = criterion(outputs, labels)
-            # loss.backward()
-            # optimizer.step()
+#             # forward + backward + optimize
+#             # outputs = model(inputs)
+#             # _, preds = torch.max(outputs, 1)
+#             # loss = criterion(outputs, labels)
+#             # loss.backward()
+#             # optimizer.step()
 
-            # statistics
-            # running_loss += loss.item() * inputs.size(0)
-            # running_corrects += torch.sum(preds == labels.data)
+#             # statistics
+#             # running_loss += loss.item() * inputs.size(0)
+#             # running_corrects += torch.sum(preds == labels.data)
             
-            total_classification_loss += classification_loss.item()
-            total_rotation_loss += rotation_loss.item()
+#             total_classification_loss += classification_loss.item()
+#             total_rotation_loss += rotation_loss.item()
      
-            # for i in range(len(inputs)):
+#             # for i in range(len(inputs)):
 
-            #     image = inputs[i].permute(1, 2, 0)  # Rearrange channels for plotting (C, H, W) to (H, W, C)
-            #     label = labels[i].item()
-            #     rotation_label = rotation_labels[i].item()
+#             #     image = inputs[i].permute(1, 2, 0)  # Rearrange channels for plotting (C, H, W) to (H, W, C)
+#             #     label = labels[i].item()
+#             #     rotation_label = rotation_labels[i].item()
 
-            #     image = image.cpu()
-            #     # Plot and save the image
-            #     plt.figure(figsize=(3, 3))
-            #     plt.imshow(image)
-            #     plt.title(f"Class: {label}, Rotation: {rotation_label * 90}°")
-            #     plt.axis('off')
-            #     plt.savefig(f"image_{label}_{rotation_label}.png")  # Save the image with a unique filename
+#             #     image = image.cpu()
+#             #     # Plot and save the image
+#             #     plt.figure(figsize=(3, 3))
+#             #     plt.imshow(image)
+#             #     plt.title(f"Class: {label}, Rotation: {rotation_label * 90}°")
+#             #     plt.axis('off')
+#             #     plt.savefig(f"image_{label}_{rotation_label}.png")  # Save the image with a unique filename
 
-        # print(f'Epoch [{epoch + 1}/{num_epochs}] Classification Loss: {total_classification_loss:.4f}, Rotation Loss: {total_rotation_loss:.4f}')
-        # train_loss = running_loss / len(train_loader.dataset)
-        # train_accuracy = running_corrects / len(train_loader.dataset)
+#         # print(f'Epoch [{epoch + 1}/{num_epochs}] Classification Loss: {total_classification_loss:.4f}, Rotation Loss: {total_rotation_loss:.4f}')
+#         # train_loss = running_loss / len(train_loader.dataset)
+#         # train_accuracy = running_corrects / len(train_loader.dataset)
 
-        # # Evaluation
-        # model.eval()
-        eval_loss, eval_accuracy, eval_rot_accuracy = top1Accuracy_rotation(model=model, test_loader=test_loader, device=device, criterion=None)
+#         # # Evaluation
+#         # model.eval()
+#         eval_loss, eval_accuracy, eval_rot_accuracy = top1Accuracy_rotation(model=model, test_loader=test_loader, device=device, criterion=None)
 
-        print("Epoch: {:02d} Eval Acc Clas: {:.3f} Eval Acc Rot: {:.3f}".format(epoch, eval_accuracy, eval_rot_accuracy))
+#         print("Epoch: {:02d} Eval Acc Clas: {:.3f} Eval Acc Rot: {:.3f}".format(epoch, eval_accuracy, eval_rot_accuracy))
 
-    return model
+#     return model

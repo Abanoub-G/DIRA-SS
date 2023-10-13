@@ -67,6 +67,13 @@ def train_model(model, train_loader, test_loader, device, learning_rate=1e-2, nu
         # Training
         model.train()
 
+        # === I added this snipet to stop the model running mean and std to change when training. 
+        STOPPED at: Might want to allow the initial layers normalisation and std to vary but fix the ones in the last layers. Test the differnet options on an excel sheet.
+
+        for name, module in model.named_modules():
+            if isinstance(module, nn.BatchNorm2d):
+                module.eval() 
+
         running_loss = 0
         running_corrects = 0
 
