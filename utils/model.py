@@ -51,7 +51,7 @@ def model_selection(model_selection_flag=0, model_dir="", model_choice="", model
     return model
 
 
-def train_model(model, train_loader, test_loader, device, learning_rate=1e-2, num_epochs=200 ):
+def train_model(model, train_loader, test_loader, device, learning_rate=1e-2, num_epochs=200, fix_batch_noramlisation=False):
 
     criterion = nn.CrossEntropyLoss()
 
@@ -68,11 +68,10 @@ def train_model(model, train_loader, test_loader, device, learning_rate=1e-2, nu
         model.train()
 
         # === I added this snipet to stop the model running mean and std to change when training. 
-        STOPPED at: Might want to allow the initial layers normalisation and std to vary but fix the ones in the last layers. Test the differnet options on an excel sheet.
-
-        for name, module in model.named_modules():
-            if isinstance(module, nn.BatchNorm2d):
-                module.eval() 
+        if fix_batch_noramlisation:
+            for name, module in model.named_modules():
+                if isinstance(module, nn.BatchNorm2d):
+                    module.eval() 
 
         running_loss = 0
         running_corrects = 0

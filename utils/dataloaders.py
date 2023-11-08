@@ -124,18 +124,15 @@ def cifar_c_dataloader(severity, noise_type="gaussian_noise", dataset_choice ="C
     # Rearranging tensor for corrupte data to match format of un-corrupt.
     images = images.reshape((images.size()[0], images_size, images_size,3))
     images = np.transpose(images,(0,3,1,2)) # Custom transpose needed for ouput of courrputed and non courrputed to match (found emprically)
-    
 
     images = images.float()/255
-
-    # test_set_c = torch.utils.data.TensorDataset(images,labels)
-    # testloader_c = torch.utils.data.DataLoader(test_set_c, batch_size=64, shuffle=False)
-
+    
     train_set_c = CustomTensorDataset(tensors=(images, labels), transform=custom_train_transform)
-    trainloader_c = torch.utils.data.DataLoader(train_set_c, batch_size=64, shuffle=False)
+    trainloader_c_clas = torch.utils.data.DataLoader(train_set_c, batch_size=64, shuffle=False)
 
     test_set_c = CustomTensorDataset(tensors=(images, labels), transform=custom_test_transform)
-    testloader_c = torch.utils.data.DataLoader(test_set_c, batch_size=64, shuffle=False)
+    testloader_c_clas = torch.utils.data.DataLoader(test_set_c, batch_size=64, shuffle=False)
+
 
     image, label = train_set_c[0]
     image = image.numpy()
@@ -144,7 +141,7 @@ def cifar_c_dataloader(severity, noise_type="gaussian_noise", dataset_choice ="C
     plt.savefig("temp.png")
     # input("press enter to conti")
 
-    return trainloader_c, testloader_c, images, labels
+    return trainloader_c_clas, testloader_c_clas, images, labels 
 
 def imagenet_c_dataloader(severity, noise_type="gaussian_noise", tiny_imagenet=False):
 
@@ -400,7 +397,55 @@ def augmented_samples_dataloader_iterative_imagenet(N_T, train_set, test_set, sa
 
     return N_T_trainloader_c, N_T_testloader_c, samples_indices_array
 
+def auxilary_samples_dataloader_iterative(N_T, noisy_images, samples_indices_array):
+    # Get length of images
+    max_num_noisy_samples = len(noisy_images)-1
 
+    number_of_samples_to_add =  N_T - len(samples_indices_array)
+
+    for _ in range(number_of_samples_to_add): 
+        # Select a random number from the max number of images
+        i = random.randint(0,max_num_noisy_samples)
+        samples_indices_array.append(i)
+
+    print("Number of samples being used in retraining = ",len(samples_indices_array))
+    selected_noisy_images_unrotated = np.take(noisy_images,samples_indices_array, axis=0)
+    # selected_noisy_labels = np.take(noisy_labels,samples_indices_array, axis=0)
+    
+    selected_noisy_labels = []
+    selected_noisy_images = []
+    for i, image in enumerate(selected_noisy_images_unrotated):
+
+        # Generate rotated images.
+        for rotation_label in [0, 1, 2, 3]:
+            selected_noisy_labels.append(rotation_label)
+            selected_noisy_images.append(torch.rot90(image,rotation_label, [1, 2]))
+
+    selected_noisy_labels = torch.tensor(selected_noisy_labels)
+    selected_noisy_images = torch.stack(selected_noisy_images, dim=0)
+
+    # print("selected_noisy_labels = ",selected_noisy_labels)
+
+    N_T_train_set_c = CustomTensorDataset(tensors=(selected_noisy_images, selected_noisy_labels), transform=custom_test_transform)
+    N_T_trainloader_c = torch.utils.data.DataLoader(N_T_train_set_c, batch_size=64, shuffle=True)
+
+    N_T_test_set_c = CustomTensorDataset(tensors=(selected_noisy_images, selected_noisy_labels), transform=custom_test_transform)
+    N_T_testloader_c = torch.utils.data.DataLoader(N_T_test_set_c, batch_size=64, shuffle=False)
+
+
+    # Display some images to visualise transforms
+    show_pics_samples = True
+    if show_pics_samples == True:
+        for i, data in enumerate(N_T_trainloader_c):
+            x, y = data  
+            imshow(torchvision.utils.make_grid(x, 4), "train_transforms.png" , title='train_Transforms')
+            break
+        for i, data in enumerate(N_T_testloader_c):
+            x, y = data  
+            imshow(torchvision.utils.make_grid(x, 4), "test_transforms.png", title='test_Transforms')
+            break
+        # input("press eneter to continue. Look at pictures to valiate roations are happening.")
+    return N_T_trainloader_c, N_T_testloader_c, samples_indices_array
 
 # Custom dataset class for CIFAR-10 with rotation labels
 class CIFAR10WithRotation(Dataset):
@@ -430,13 +475,41 @@ class CIFAR10WithRotation(Dataset):
         
         return image, rotation_label
 
+# # Custom dataset class for CIFAR-10C with rotation labels
+# class CIFAR10CWithRotation(Dataset):
+#     def __init__(self, root, train=True, download=True, transform=None, do_rotations=True):
+#         self.cifar10 = torchvision.datasets.CIFAR10(root, train=train, download=download, transform=transform)
+#         self.do_rotations = do_rotations
+
+#     def __len__(self):
+#         return len(self.cifar10)
+
+#     def __getitem__(self, idx):
+#         image, label = self.cifar10[idx]
+        
+#         # Randomly generate a rotation label (0, 1, 2, or 3)
+#         if self.do_rotations:
+#             rotation_label = np.random.randint(4)  # Randomly select 0, 1, 2, or 3
+#         else:
+#             rotation_label = 0
+        
+#         # Apply rotation to the image based on the label
+#         if rotation_label == 1:
+#             image = torch.rot90(image,1, [1, 2])
+#         elif rotation_label == 2:
+#             image = torch.rot90(image,2, [1, 2])
+#         elif rotation_label == 3:
+#             image = torch.rot90(image,3, [1, 2])
+        
+#         return image, rotation_label
+
 
 def pytorch_rotation_dataloader(dataset_name="", dataset_dir="", images_size=32, batch_size=64):
 
     train_transform = transforms.Compose([
                 transforms.Resize((images_size, images_size)),
-                transforms.RandomCrop(32, padding=4),
-                transforms.RandomHorizontalFlip(),
+                # transforms.RandomCrop(32, padding=4),
+                # transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(),
                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
               ])

@@ -13,7 +13,10 @@ from torch import nn, optim
 from torchvision import datasets, transforms
 
 from utils.common import set_random_seeds, set_cuda, logs
-from utils.dataloaders import pytorch_dataloader, pytorch_rotation_dataloader, cifar_c_dataloader, imagenet_c_dataloader, samples_dataloader_iterative, augmented_samples_dataloader_iterative, augmented_samples_dataloader_iterative_imagenet
+from utils.dataloaders import pytorch_dataloader, pytorch_rotation_dataloader
+from utils.dataloaders import cifar_c_dataloader, imagenet_c_dataloader 
+from utils.dataloaders import augmented_samples_dataloader_iterative, augmented_samples_dataloader_iterative_imagenet
+from utils.dataloaders import auxilary_samples_dataloader_iterative
 
 from utils.multi_task_model import model_selection
 
@@ -57,6 +60,8 @@ NOISE_TYPES_ARRAY = ["brightness","contrast","defocus_blur",
 					"saturate", "shot_noise", "snow", "spatter", 
 					"speckle_noise", "zoom_blur"]
 
+# NOISE_TYPES_ARRAY = ["gaussian_noise","shot_noise"]
+
 # NOISE_TYPES_ARRAY = ["jpeg_compression", "motion_blur", "pixelate", "shot_noise", "snow", "zoom_blur"]
 # NOISE_TYPES_ARRAY = ["contrast","motion_blur","fog"]
 
@@ -65,11 +70,18 @@ NOISE_TYPES_ARRAY = ["brightness","contrast","defocus_blur",
 NOISE_SEVERITY 	  = 5 # Options from 1 to 5
 
 MAX_SAMPLES_NUMBER = 120 #220
+N_T_Initial        = 1
 N_T_STEP = 25 #16
 
 def retrain(model, testloader, N_T_trainloader_c, N_T_testloader_c, device, fisher_dict, optpar_dict, num_retrain_epochs, lambda_retrain, lr_retrain, zeta):
+	
+	# model.use_rotation_head()
+	model.use_classification_head()
+
 	# Copy model for retraining
 	retrained_model = copy.deepcopy(model)
+
+	retrained_model.use_classification_head()
 	
 	# Retrain
 	retrained_model = train_model_ewc(model = retrained_model, 
@@ -88,14 +100,16 @@ def retrain(model, testloader, N_T_trainloader_c, N_T_testloader_c, device, fish
 	# ========================================	
 	# == Evaluate Retrained model
 	# ========================================
-	
-	# Calculate accuracy of retrained model on target dataset X_tar 
+
+	# Calculate accuracy of retrained model on target domain samples for the task of rotation 
+	_, A_k    = top1Accuracy(model=retrained_model, test_loader=N_T_testloader_c, device=device, criterion=None)
+	print("A_k = ",A_k)
+
+	retrained_model.use_classification_head()
+	# Calculate accuracy of retrained model on initial test dataset for the task of classification  
 	_, A_0    = top1Accuracy(model=retrained_model, test_loader=testloader, device=device, criterion=None)
 	print("A_0 = ",A_0)
 
-	# Calculate accuracy of retrained model on target dataset X_tar 
-	_, A_k    = top1Accuracy(model=retrained_model, test_loader=N_T_testloader_c, device=device, criterion=None)
-	print("A_k = ",A_k)
 
 	# Calculate CFAS
 	# CFAS = A_k.cpu().numpy() * (zeta*A_0.cpu().numpy() +1)
@@ -121,7 +135,7 @@ def main():
 	# Load model
 	model = model_selection(model_selection_flag=MODEL_SELECTION_FLAG, model_dir=MODEL_DIR, model_choice=MODEL_CHOICE, model_variant=MODEL_VARIANT, saved_model_filepath=MODEL_FILEPATH, num_classes=NUM_CLASSES, device=device, mutli_selection_flag = False)
 	model_multi = model_selection(model_selection_flag=MODEL_SELECTION_FLAG, model_dir=MODEL_DIR, model_choice=MODEL_CHOICE, model_variant=MODEL_VARIANT, saved_model_filepath=MODEL_FILEPATH, num_classes=NUM_CLASSES, device=device, mutli_selection_flag = True)
-	model_multi_copy = copy.deepcopy(model_multi)
+	# model_multi_copy = copy.deepcopy(model_multi)
 	print("Progress: Model has been setup.")
 
 	# Setup original dataset
@@ -135,7 +149,7 @@ def main():
 	# Evaluate model
 	_, eval_accuracy_clas_single   = top1Accuracy(model=model, test_loader=testloader_clas, device=device, criterion=None)
 	_, eval_accuracy_clas_multi   = top1Accuracy(model=model_multi, test_loader=testloader_clas, device=device, criterion=None)
-	_, eval_accuracy_clas_multi_copy   = top1Accuracy(model=model_multi_copy, test_loader=testloader_clas, device=device, criterion=None)
+	# _, eval_accuracy_clas_multi_copy   = top1Accuracy(model=model_multi_copy, test_loader=testloader_clas, device=device, criterion=None)
 	model_multi.use_rotation_head()
 	_, eval_accuracy_rot_multi  = top1Accuracy(model=model_multi, test_loader=testloader_rot, device=device, criterion=None)
 	
@@ -147,6 +161,9 @@ def main():
 	# Train the Rotation Head: Freeze all layers except the layer4, avgpool and fc layers which should be set to the Rotation head.
 	for param in model_multi.parameters():
 		param.requires_grad = False
+
+	for param in model_multi.rotation_head.parameters():#resnet.fc.parameters():
+		param.requires_grad = True
 
 	# for param in model_multi.resnet.layer4.parameters():
 	# 	param.requires_grad = True
@@ -160,18 +177,22 @@ def main():
 	# 	input("press enter to continue")
 	# 	param.requires_grad = True
 
-	print("Rotation")
+	# print("Rotation")
 	# flag_temp = True
-	for param in model_multi.rotation_head.parameters():#resnet.fc.parameters():
-		print(param)
+	# for param in model_multi.rotation_head.parameters():#resnet.fc.parameters():
+		# print(param)
 		# if flag_temp:
 		# 	flag_temp= False
 		# 	continue
-		input("press enter to continue")
-		param.requires_grad = True
+		# input("press enter to continue")
+		# param.requires_grad = True
 
-	# Fine Tune model
-	model_multi = train_model(model=model_multi, train_loader=trainloader_rot, test_loader=testloader_rot, device=device, learning_rate=1e-2, num_epochs=2)
+	# Train new layers in model for rotation task
+	model_multi = train_model(model=model_multi, train_loader=trainloader_rot, test_loader=testloader_rot, device=device, learning_rate=1e-2, num_epochs=2, fix_batch_noramlisation=True)
+
+	# Once new layers are trained set grad back to usual
+	for param in model_multi.parameters():#resnet.fc.parameters():
+		param.requires_grad = True
 
 	# Evaluate model
 	model_multi.use_classification_head()
@@ -192,29 +213,29 @@ def main():
 
 	# print("Rotation")
 	# flag_temp = True
-	for param in model_multi.rotation_head.parameters():#resnet.fc.parameters():
-		print(param)
+	# for param in model_multi.rotation_head.parameters():#resnet.fc.parameters():
+	# 	print(param)
 		# input("press enter to continue")
 		# param.requires_grad = True
 
-	model_multi.use_rotation_head()
-	model_multi_copy.use_rotation_head()
-	print("================ Change in Rotation head")
-	for (name1, param1), (name2, param2) in zip(model_multi_copy.named_parameters(), model_multi.named_parameters()):
-		if param1.size() == param2.size():
-			diff = torch.abs(param1 - param2)
+	# model_multi.use_rotation_head()
+	# model_multi_copy.use_rotation_head()
+	# print("================ Change in Rotation head")
+	# for (name1, param1), (name2, param2) in zip(model_multi_copy.named_parameters(), model_multi.named_parameters()):
+	# 	if param1.size() == param2.size():
+	# 		diff = torch.abs(param1 - param2)
 			# print(f"Parameter Name: {name1}")
 			# print(f"Max Absolute Difference: {diff.max()}")
 			# print(f"Min Absolute Difference: {diff.min()}")
 			# print(f"Mean Absolute Difference: {diff.mean()}")
 			# print("-----")
 	
-	print("================ Change in Classificaiton head")
-	model_multi.use_classification_head()
-	model_multi_copy.use_classification_head()
-	for (name1, param1), (name2, param2) in zip(model_multi_copy.named_parameters(), model_multi.named_parameters()):
-		if param1.size() == param2.size():
-			diff = torch.abs(param1 - param2)
+	# print("================ Change in Classificaiton head")
+	# model_multi.use_classification_head()
+	# model_multi_copy.use_classification_head()
+	# for (name1, param1), (name2, param2) in zip(model_multi_copy.named_parameters(), model_multi.named_parameters()):
+	# 	if param1.size() == param2.size():
+	# 		diff = torch.abs(param1 - param2)
 			# print(f"Parameter Name: {name1}")
 			# print(f"Max Absolute Difference: {diff.max()}")
 			# print(f"Min Absolute Difference: {diff.min()}")
@@ -230,13 +251,15 @@ def main():
 	# 	- You can try to fine tune the main parameters as well using a low learning rate to improve accuracy on rotation detection.
 	# 	- Retrain on new domain based on rotation task only. Measure accuracy. 
 
-	
+	# Set model to classificaton head
+	model_multi.use_classification_head()
+
 
 	# Initiate dictionaries for regularisation using EWC	
 	fisher_dict = {}
 	optpar_dict = {}
 
-	optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=1e-5)
+	optimizer = optim.SGD(model_multi.parameters(), lr=0.01, momentum=0.9, weight_decay=1e-5)
 	
 	save_dict = False
 	load_dict = True
@@ -251,7 +274,8 @@ def main():
 		print("PROGRESS: Calculated Fisher loaded")
 
 	else:
-		fisher_dict, optpar_dict = on_task_update(0, trainloader, model, optimizer, fisher_dict, optpar_dict, device)
+		# fisher_dict, optpar_dict = on_task_update(0, trainloader_clas, model, optimizer, fisher_dict, optpar_dict, device)
+		fisher_dict, optpar_dict = on_task_update(0, trainloader_clas, model_multi, optimizer, fisher_dict, optpar_dict, device)
 		print("PROGRESS: Calculated Fisher matrix")
 
 		if save_dict == True and (DATASET_NAME == "ImageNet" or DATASET_NAME == "TinyImageNet"):
@@ -278,7 +302,7 @@ def main():
 		else:
 			# load noisy dataset
 			if DATASET_NAME == "CIFAR10" or DATASET_NAME == "CIFAR100":
-				trainloader_c, testloader_c, noisy_images, noisy_labels    = cifar_c_dataloader(NOISE_SEVERITY, noise_type, DATASET_NAME)
+				trainloader_c_clas, testloader_c_clas, noisy_images, noisy_labels = cifar_c_dataloader(NOISE_SEVERITY, noise_type, DATASET_NAME)
 
 			elif DATASET_NAME == "ImageNet":
 				trainloader_c, testloader_c, train_set, test_set     = imagenet_c_dataloader(NOISE_SEVERITY, noise_type)
@@ -289,9 +313,18 @@ def main():
 			# print("shape of noisy labels = ", np.shape(noisy_labels))
 		
 		# Evaluate testloader_c on original model
-		_,eval_accuracy     = top1Accuracy(model=model, test_loader=testloader_c, device=device, criterion=None)
-		original_model_eval_accuracy       = eval_accuracy.cpu().numpy()
-		print(noise_type +" dataset = ",original_model_eval_accuracy)
+		model_multi.use_classification_head()
+		_, eval_accuracy_clas_multi   = top1Accuracy(model=model_multi, test_loader=testloader_c_clas, device=device, criterion=None)
+		# model_multi.use_rotation_head()
+		# _, eval_accuracy_rot_multi    = top1Accuracy(model=model_multi, test_loader=testloader_c_rot, device=device, criterion=None)
+		
+		print("Cls Accuray on " + noise_type +" dataset = ",eval_accuracy_clas_multi)
+		# print("Rot Accuray on " + noise_type +" dataset = ",eval_accuracy_rot_multi)
+
+		# model_multi.use_classification_head()
+		# _,eval_accuracy     = top1Accuracy(model=model, test_loader=testloader_c_clas, device=device, criterion=None)
+		# original_model_eval_accuracy       = eval_accuracy.cpu().numpy()
+		# print(noise_type +" dataset = ",original_model_eval_accuracy)
 		
 
 		# ========================================	
@@ -300,15 +333,17 @@ def main():
 		N_T_vs_A_T = []
 		samples_indices_array = []
 		# Extract N_T random samples
-		for N_T in range(2,MAX_SAMPLES_NUMBER,N_T_STEP):
+		for N_T in range(0, MAX_SAMPLES_NUMBER, N_T_STEP):
+			if N_T == 0:
+				N_T = N_T_Initial
+
 			print("++++++++++++++")
 			print("N_T = ", N_T)
 			print("Noise Type = ", noise_type) 
-			if DATASET_NAME == "CIFAR10" or DATASET_NAME == "CIFAR100":
-				N_T_trainloader_c, N_T_testloader_c, samples_indices_array = augmented_samples_dataloader_iterative(N_T, noisy_images, noisy_labels, samples_indices_array, N_T_STEP)
-			
-			elif DATASET_NAME == "ImageNet" or DATASET_NAME == "TinyImageNet":
-				N_T_trainloader_c, N_T_testloader_c, samples_indices_array = augmented_samples_dataloader_iterative_imagenet(N_T, train_set, test_set, samples_indices_array, N_T_STEP)
+			if DATASET_NAME == "CIFAR10" or DATASET_NAME == "CIFAR100": 
+				N_T_trainloader_c_rot, N_T_testloader_c_rot, samples_indices_array = auxilary_samples_dataloader_iterative(N_T, noisy_images, samples_indices_array)
+			# elif DATASET_NAME == "ImageNet" or DATASET_NAME == "TinyImageNet":
+			# 	N_T_trainloader_c, N_T_testloader_c, samples_indices_array = augmented_samples_dataloader_iterative_imagenet(N_T, train_set, test_set, samples_indices_array, N_T_STEP)
 
 
 
@@ -324,40 +359,39 @@ def main():
 			temp_list_lambda           = []
 			temp_list_CFAS             = []
 
-			SGC_flag  = False
-			CFAS_flag = False
+			# SGC_flag  = False
+			# CFAS_flag = False
 			EWC_flag  = True
 
-			if SGC_flag == True:
-				lr_retrain = 1e-2
-				lambda_retrain = 0
+			# if SGC_flag == True:
+			# 	lr_retrain = 1e-2
+			# 	lambda_retrain = 0
 
-				retrained_model, CFAS = retrain(model, testloader, N_T_trainloader_c, N_T_testloader_c, device, fisher_dict, optpar_dict, num_retrain_epochs, lambda_retrain, lr_retrain, zeta)
+			# 	retrained_model, CFAS = retrain(model, testloader, N_T_trainloader_c, N_T_testloader_c, device, fisher_dict, optpar_dict, num_retrain_epochs, lambda_retrain, lr_retrain, zeta)
 				
-				# Append Data
-				temp_list_retrained_models.append(retrained_model)
-				temp_list_lr.append(lr_retrain)
-				temp_list_lambda.append(lambda_retrain)
-				temp_list_CFAS.append(CFAS) 
+			# 	# Append Data
+			# 	temp_list_retrained_models.append(retrained_model)
+			# 	temp_list_lr.append(lr_retrain)
+			# 	temp_list_lambda.append(lambda_retrain)
+			# 	temp_list_CFAS.append(CFAS) 
 
-			if CFAS_flag == True:
-				for lr_retrain in [1e-5,1e-4,1e-3,1e-2]:
-					lambda_retrain = 0
+			# if CFAS_flag == True:
+			# 	for lr_retrain in [1e-5,1e-4,1e-3,1e-2]:
+			# 		lambda_retrain = 0
 
-					retrained_model, CFAS = retrain(model, testloader, N_T_trainloader_c, N_T_testloader_c, device, fisher_dict, optpar_dict, num_retrain_epochs, lambda_retrain, lr_retrain, zeta)
+			# 		retrained_model, CFAS = retrain(model, testloader, N_T_trainloader_c, N_T_testloader_c, device, fisher_dict, optpar_dict, num_retrain_epochs, lambda_retrain, lr_retrain, zeta)
 					
-					# Append Data
-					temp_list_retrained_models.append(retrained_model)
-					temp_list_lr.append(lr_retrain)
-					temp_list_lambda.append(lambda_retrain)
-					temp_list_CFAS.append(CFAS) 
+			# 		# Append Data
+			# 		temp_list_retrained_models.append(retrained_model)
+			# 		temp_list_lr.append(lr_retrain)
+			# 		temp_list_lambda.append(lambda_retrain)
+			# 		temp_list_CFAS.append(CFAS) 
 
 			if EWC_flag == True:
 				for lr_retrain in [1e-5,1e-4,1e-3,1e-2]:
 					for lambda_retrain in [0.25,0.5,0.75,1,2]:
-
-						retrained_model, CFAS = retrain(model, testloader, N_T_trainloader_c, N_T_testloader_c, device, fisher_dict, optpar_dict, num_retrain_epochs, lambda_retrain, lr_retrain, zeta)
-						
+						model_multi.use_rotation_head()
+						retrained_model, CFAS = retrain(model_multi, testloader_clas, N_T_trainloader_c_rot, N_T_testloader_c_rot, device, fisher_dict, optpar_dict, num_retrain_epochs, lambda_retrain, lr_retrain, zeta) 
 						# Append Data
 						temp_list_retrained_models.append(retrained_model)
 						temp_list_lr.append(lr_retrain)
@@ -372,7 +406,8 @@ def main():
 			print("lambda = ", temp_list_lambda[index_max])
 
 			# Calculate accuracy of retrained model on target dataset X_tar 
-			_, A_T    = top1Accuracy(model=retrained_model, test_loader=testloader_c, device=device, criterion=None)
+			retrained_model.use_classification_head()
+			_, A_T    = top1Accuracy(model=retrained_model, test_loader=testloader_c_clas, device=device, criterion=None)
 			print("A_T = ",A_T)
 
 			# best = fmin(fn=lambda x: retraining_objective(x),

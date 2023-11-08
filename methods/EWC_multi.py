@@ -11,12 +11,12 @@ def on_task_update(task_id, trainloader, model, optimizer, fisher_dict, optpar_d
     optimizer.zero_grad()
     
     # accumulating gradients
-    for inputs, labels, _ in trainloader:
+    for inputs, labels in trainloader:
 
         inputs = inputs.to(device)
         labels = labels.to(device)
 
-        outputs,_ = model(inputs)
+        outputs= model(inputs)
     
         loss = F.cross_entropy(outputs, labels)
         loss.backward()
@@ -52,7 +52,7 @@ def train_model_ewc(model, train_loader, test_loader, device, fisher_dict, optpa
         running_loss = 0
         running_corrects = 0
 
-        for inputs, labels, _ in train_loader:
+        for inputs, labels in train_loader:
             # print("Model training..")
             inputs = inputs.to(device)
             labels = labels.to(device)
@@ -86,6 +86,8 @@ def train_model_ewc(model, train_loader, test_loader, device, fisher_dict, optpa
                 # print("I am in EWC and I am working on taks nummber", task)
                 # print("ewc_lambda[task] = ",ewc_lambda[task])
                 for name, param in model.named_parameters():
+                    # print("name = ",name)
+                    # print("fisher_dict = ", fisher_dict)
                     fisher = fisher_dict[task][name]
                     optpar = optpar_dict[task_id-1][name]
                     loss += (fisher * (optpar - param).pow(2)).sum() * ewc_lambda

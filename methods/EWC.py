@@ -11,7 +11,7 @@ def on_task_update(task_id, trainloader, model, optimizer, fisher_dict, optpar_d
     optimizer.zero_grad()
     
     # accumulating gradients
-    for inputs, labels, in trainloader:
+    for inputs, labels in trainloader:
 
         inputs = inputs.to(device)
         labels = labels.to(device)
