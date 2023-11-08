@@ -60,7 +60,7 @@ NOISE_TYPES_ARRAY = ["brightness","contrast","defocus_blur",
 					"saturate", "shot_noise", "snow", "spatter", 
 					"speckle_noise", "zoom_blur"]
 
-# NOISE_TYPES_ARRAY = ["gaussian_noise","shot_noise"]
+NOISE_TYPES_ARRAY = ["gaussian_noise"]#,"shot_noise"]
 
 # NOISE_TYPES_ARRAY = ["jpeg_compression", "motion_blur", "pixelate", "shot_noise", "snow", "zoom_blur"]
 # NOISE_TYPES_ARRAY = ["contrast","motion_blur","fog"]
@@ -75,13 +75,14 @@ N_T_STEP = 25 #16
 
 def retrain(model, testloader, N_T_trainloader_c, N_T_testloader_c, device, fisher_dict, optpar_dict, num_retrain_epochs, lambda_retrain, lr_retrain, zeta):
 	
-	# model.use_rotation_head()
-	model.use_classification_head()
+	model.use_rotation_head()
+	# model.use_classification_head()
 
 	# Copy model for retraining
 	retrained_model = copy.deepcopy(model)
 
-	retrained_model.use_classification_head()
+	# retrained_model.use_classification_head()
+	retrained_model.use_rotation_head()
 	
 	# Retrain
 	retrained_model = train_model_ewc(model = retrained_model, 
@@ -100,7 +101,7 @@ def retrain(model, testloader, N_T_trainloader_c, N_T_testloader_c, device, fish
 	# ========================================	
 	# == Evaluate Retrained model
 	# ========================================
-
+	retrained_model.use_rotation_head()
 	# Calculate accuracy of retrained model on target domain samples for the task of rotation 
 	_, A_k    = top1Accuracy(model=retrained_model, test_loader=N_T_testloader_c, device=device, criterion=None)
 	print("A_k = ",A_k)
@@ -158,7 +159,7 @@ def main():
 	print("Multiple-Head Model Rotation Accuray on original dataset = ",eval_accuracy_rot_multi)
 
 
-	# Train the Rotation Head: Freeze all layers except the layer4, avgpool and fc layers which should be set to the Rotation head.
+	# Train the Rotation Head: Freeze all layers except the layers for the roation auxilary task.
 	for param in model_multi.parameters():
 		param.requires_grad = False
 
@@ -251,9 +252,11 @@ def main():
 	# 	- You can try to fine tune the main parameters as well using a low learning rate to improve accuracy on rotation detection.
 	# 	- Retrain on new domain based on rotation task only. Measure accuracy. 
 
+	# # Set model to appropriate head
+	# model_multi.use_rotation_head()
+
 	# Set model to classificaton head
 	model_multi.use_classification_head()
-
 
 	# Initiate dictionaries for regularisation using EWC	
 	fisher_dict = {}
@@ -390,7 +393,8 @@ def main():
 			if EWC_flag == True:
 				for lr_retrain in [1e-5,1e-4,1e-3,1e-2]:
 					for lambda_retrain in [0.25,0.5,0.75,1,2]:
-						model_multi.use_rotation_head()
+						# model_multi.use_rotation_head()
+						# model_multi.use_classification_head()
 						retrained_model, CFAS = retrain(model_multi, testloader_clas, N_T_trainloader_c_rot, N_T_testloader_c_rot, device, fisher_dict, optpar_dict, num_retrain_epochs, lambda_retrain, lr_retrain, zeta) 
 						# Append Data
 						temp_list_retrained_models.append(retrained_model)

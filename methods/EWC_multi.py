@@ -88,9 +88,14 @@ def train_model_ewc(model, train_loader, test_loader, device, fisher_dict, optpa
                 for name, param in model.named_parameters():
                     # print("name = ",name)
                     # print("fisher_dict = ", fisher_dict)
-                    fisher = fisher_dict[task][name]
-                    optpar = optpar_dict[task_id-1][name]
-                    loss += (fisher * (optpar - param).pow(2)).sum() * ewc_lambda
+                    if any(keyword in name for keyword in ["layer4","avgpool","fc", "classification_head", "rotation_head"]):
+                        pass
+                        # print("Not applying fisher matrix for this as we do not care about it.")
+                        # loss += (fisher * (optpar - param).pow(2)).sum() * 0
+                    else:
+                        fisher = fisher_dict[task][name]
+                        optpar = optpar_dict[task_id-1][name]
+                        loss += (fisher * (optpar - param).pow(2)).sum() * ewc_lambda
                     # loss += (fisher * (optpar - param).pow(2)).sum() * ewc_lambda[task]
                     # loss += ((optpar - param).pow(2)).sum() * ewc_lambda   
 

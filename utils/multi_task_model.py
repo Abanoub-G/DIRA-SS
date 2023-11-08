@@ -50,13 +50,13 @@ class MultiTaskResNet(nn.Module):
 
         self.n_features = self.resnet.fc.in_features
 
-        # self.classification_layer4 = self.resnet.layer4
+        # self.classification_layer4 = copy.deepcopy(self.resnet.layer4)
         # self.classification_avgpool = copy.deepcopy(self.resnet.avgpool)
         self.classification_head = copy.deepcopy(self.resnet.fc)
 
-        # copy.deepcopy([net.layer3, net.bn, net.relu, net.avgpool])
-        # self.rotation_layer4  = self.resnet.layer4
-        # self.rotation_avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        
+        # self.rotation_layer4  = copy.deepcopy(self.resnet.layer4)
+        # self.rotation_avgpool = copy.deepcopy(self.resnet.avgpool) #nn.AdaptiveAvgPool2d((1, 1))
         self.rotation_head    = nn.Linear(self.n_features, num_rotation_classes) 
 
         # STOPPED At checking if the running mean and standard deviation change during to training and if this is causeing an issue!!.
