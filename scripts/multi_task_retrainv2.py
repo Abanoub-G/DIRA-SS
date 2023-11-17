@@ -73,7 +73,7 @@ MAX_SAMPLES_NUMBER = 120 #220
 N_T_Initial        = 1
 N_T_STEP = 25 #16
 
-def retrain(model, testloader, N_T_trainloader_c, N_T_testloader_c, device, fisher_dict, optpar_dict, num_retrain_epochs, lambda_retrain, lr_retrain, zeta):
+def retrain(model, testloader, N_T_trainloader_c, N_T_testloader_c, device, fisher_dict, optpar_dict, num_retrain_epochs, lambda_retrain, lr_retrain, zeta, layers_keywords, fix_batch_noramlisation):
 	
 	model.use_rotation_head()
 	# model.use_classification_head()
@@ -86,6 +86,7 @@ def retrain(model, testloader, N_T_trainloader_c, N_T_testloader_c, device, fish
 	
 	# Retrain
 	retrained_model = train_model_ewc(model = retrained_model, 
+									layers_keywords = layers_keywords,
 									train_loader = N_T_trainloader_c, 
 									test_loader = N_T_testloader_c, 
 									device = device, 
@@ -95,7 +96,8 @@ def retrain(model, testloader, N_T_trainloader_c, N_T_testloader_c, device, fish
 									ewc_lambda = lambda_retrain,
 									learning_rate=lr_retrain, 
 									momentum=0.9, 
-									weight_decay=1e-5)
+									weight_decay=1e-5,
+									fix_batch_noramlisation=fix_batch_noramlisation)
 
 
 	# ========================================	
@@ -114,7 +116,7 @@ def retrain(model, testloader, N_T_trainloader_c, N_T_testloader_c, device, fish
 
 	# Calculate CFAS
 	# CFAS = A_k.cpu().numpy() * (zeta*A_0.cpu().numpy() +1)
-	CFAS = A_k.cpu().numpy() + 10*A_0.cpu().numpy()
+	CFAS = A_k.cpu().numpy() + zeta*A_0.cpu().numpy()
 	# CFAS = A_k.cpu().numpy() + 2*A_0.cpu().numpy()
 	# CFAS = A_k.cpu().numpy() + 1.5*A_0.cpu().numpy()
 	# CFAS = A_k.cpu().numpy() * (5*A_0.cpu().numpy() +1)
@@ -123,6 +125,37 @@ def retrain(model, testloader, N_T_trainloader_c, N_T_testloader_c, device, fish
 	return retrained_model, CFAS
 
 def main():
+	# ========================================
+	# == Experiment Settings.
+	# ========================================
+	num_retrain_epochs = 10
+
+	zeta = 10
+
+	experiment_number = 24
+	fix_batch_noramlisation = True
+	Swap_layers_starting_from = 2 # 2 : From layers 2  |  3 : From layers 3  |  4 : From layers 4  |  5 : For output layers only
+
+	if Swap_layers_starting_from == 5:
+
+		layers_keywords = ["avgpool",               "fc", 
+	                       "classification_avgpool","classification_head", 
+	                       "rotation_avgpool",      "rotation_head"] # Use For swapping output layers only
+
+	if Swap_layers_starting_from == 4:
+		layers_keywords = ["layer4",                "avgpool",               "fc", 
+	                       "classification_layer4", "classification_avgpool","classification_head", 
+	                       "rotation_layer4",       "rotation_avgpool",      "rotation_head"] # Use For swapping from layers 4 to end
+	
+	if Swap_layers_starting_from == 3:                       
+		layers_keywords = ["layer3",               "layer4",                "avgpool",               "fc", 
+	                       "classification_layer3","classification_layer4", "classification_avgpool","classification_head", 
+	                       "rotation_layer3",      "rotation_layer4",       "rotation_avgpool",      "rotation_head"]  # Use For swapping from layers 3 to end
+
+	if Swap_layers_starting_from == 2:
+		layers_keywords = ["layer2" ,              "layer3",               "layer4",                "avgpool",               "fc", 
+	                       "classification_layer2","classification_layer3","classification_layer4", "classification_avgpool","classification_head", 
+	                       "rotation_layer2",      "rotation_layer3",      "rotation_layer4",       "rotation_avgpool",      "rotation_head"]  # Use For swapping from layers 2 to end
 
 	# ========================================
 	# == Preliminaries
@@ -135,7 +168,7 @@ def main():
 
 	# Load model
 	model = model_selection(model_selection_flag=MODEL_SELECTION_FLAG, model_dir=MODEL_DIR, model_choice=MODEL_CHOICE, model_variant=MODEL_VARIANT, saved_model_filepath=MODEL_FILEPATH, num_classes=NUM_CLASSES, device=device, mutli_selection_flag = False)
-	model_multi = model_selection(model_selection_flag=MODEL_SELECTION_FLAG, model_dir=MODEL_DIR, model_choice=MODEL_CHOICE, model_variant=MODEL_VARIANT, saved_model_filepath=MODEL_FILEPATH, num_classes=NUM_CLASSES, device=device, mutli_selection_flag = True)
+	model_multi = model_selection(model_selection_flag=MODEL_SELECTION_FLAG, model_dir=MODEL_DIR, model_choice=MODEL_CHOICE, model_variant=MODEL_VARIANT, saved_model_filepath=MODEL_FILEPATH, num_classes=NUM_CLASSES, device=device, mutli_selection_flag = True, Swap_layers_starting_from = Swap_layers_starting_from)
 	# model_multi_copy = copy.deepcopy(model_multi)
 	print("Progress: Model has been setup.")
 
@@ -278,7 +311,7 @@ def main():
 
 	else:
 		# fisher_dict, optpar_dict = on_task_update(0, trainloader_clas, model, optimizer, fisher_dict, optpar_dict, device)
-		fisher_dict, optpar_dict = on_task_update(0, trainloader_clas, model_multi, optimizer, fisher_dict, optpar_dict, device)
+		fisher_dict, optpar_dict = on_task_update(0, trainloader_clas, model_multi, optimizer, fisher_dict, optpar_dict, device, layers_keywords=layers_keywords)
 		print("PROGRESS: Calculated Fisher matrix")
 
 		if save_dict == True and (DATASET_NAME == "ImageNet" or DATASET_NAME == "TinyImageNet"):
@@ -296,7 +329,7 @@ def main():
 	# ========================================
 	# == Load Noisy Data
 	# ========================================
-	logs_dic = {}
+	# logs_dic = {}
 	results_log = logs() 
 
 	for noise_type in NOISE_TYPES_ARRAY:
@@ -317,23 +350,29 @@ def main():
 		
 		# Evaluate testloader_c on original model
 		model_multi.use_classification_head()
-		_, eval_accuracy_clas_multi   = top1Accuracy(model=model_multi, test_loader=testloader_c_clas, device=device, criterion=None)
+		_, initial_A_T    = top1Accuracy(model=model_multi, test_loader=testloader_c_clas, device=device, criterion=None)
+		# _, eval_accuracy_clas_multi   = top1Accuracy(model=model_multi, test_loader=testloader_c_clas, device=device, criterion=None)
 		# model_multi.use_rotation_head()
 		# _, eval_accuracy_rot_multi    = top1Accuracy(model=model_multi, test_loader=testloader_c_rot, device=device, criterion=None)
 		
-		print("Cls Accuray on " + noise_type +" dataset = ",eval_accuracy_clas_multi)
+		print("Cls Accuray on " + noise_type +" dataset = ",initial_A_T)
 		# print("Rot Accuray on " + noise_type +" dataset = ",eval_accuracy_rot_multi)
 
 		# model_multi.use_classification_head()
 		# _,eval_accuracy     = top1Accuracy(model=model, test_loader=testloader_c_clas, device=device, criterion=None)
 		# original_model_eval_accuracy       = eval_accuracy.cpu().numpy()
 		# print(noise_type +" dataset = ",original_model_eval_accuracy)
-		
-
+		# ========================================	
+		# == Append Details of model performance before retraining
+		# ========================================
+		results_log.append(noise_type, 0, initial_A_T,
+								0, 
+								0, 
+								0)
 		# ========================================	
 		# == Select random N_T number of datapoints from noisy data for retraining
 		# ========================================
-		N_T_vs_A_T = []
+		# N_T_vs_A_T = []
 		samples_indices_array = []
 		# Extract N_T random samples
 		for N_T in range(0, MAX_SAMPLES_NUMBER, N_T_STEP):
@@ -353,10 +392,6 @@ def main():
 			# ========================================	
 			# == Retrain model
 			# ========================================
-			num_retrain_epochs = 10
-
-			zeta = 1
-
 			temp_list_retrained_models = []
 			temp_list_lr               = []
 			temp_list_lambda           = []
@@ -395,7 +430,7 @@ def main():
 					for lambda_retrain in [0.25,0.5,0.75,1,2]:
 						# model_multi.use_rotation_head()
 						# model_multi.use_classification_head()
-						retrained_model, CFAS = retrain(model_multi, testloader_clas, N_T_trainloader_c_rot, N_T_testloader_c_rot, device, fisher_dict, optpar_dict, num_retrain_epochs, lambda_retrain, lr_retrain, zeta) 
+						retrained_model, CFAS = retrain(model_multi, testloader_clas, N_T_trainloader_c_rot, N_T_testloader_c_rot, device, fisher_dict, optpar_dict, num_retrain_epochs, lambda_retrain, lr_retrain, zeta, layers_keywords=layers_keywords, fix_batch_noramlisation=fix_batch_noramlisation) 
 						# Append Data
 						temp_list_retrained_models.append(retrained_model)
 						temp_list_lr.append(lr_retrain)
@@ -419,16 +454,16 @@ def main():
 			# 			algo=tpe.suggest,
 			# 			max_evals=100)
 
-			N_T_vs_A_T.append((N_T, A_T))
+			# N_T_vs_A_T.append((N_T, A_T))
 			results_log.append(noise_type, N_T, A_T,
 								temp_list_lr[index_max], 
 								temp_list_lambda[index_max], 
 								zeta)
 		
 		# Log
-		logs_dic[noise_type] = N_T_vs_A_T
+		# logs_dic[noise_type] = N_T_vs_A_T
 
-	results_log.write_file("exp1.txt")
+	results_log.write_file("exp"+str(experiment_number)+".txt")
 
 
 

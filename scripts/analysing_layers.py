@@ -91,7 +91,7 @@ values = np.linspace(0, 1, N)
 # Get RGBA colors from the colormap
 colors = [cmap(value) for value in values]
 
-# Plot the variance for each layer
+# === Plot the variance for each layer on log scale
 plt.figure(figsize=(12, 8))
 for i, (name, variance) in enumerate(variance_per_layer):
     plt.subplot(4, 5, i + 1)
@@ -104,6 +104,22 @@ for i, (name, variance) in enumerate(variance_per_layer):
     plt.ylim(1e-13,1e-6)
     # plt.minorticks_on()
     # plt.grid(axis = 'y', which="both")
+
+plt.tight_layout()
+plt.savefig("variance_log.pdf")
+plt.savefig("variance_log.png")
+
+# === Plot the variance for each layer on normal scale
+plt.clf()
+plt.figure(figsize=(12, 8))
+for i, (name, variance) in enumerate(variance_per_layer):
+    plt.subplot(4, 5, i + 1)
+    plt.bar(range(len(variance)), variance, color=colors[i])
+    plt.title(i, fontsize = 8)#name, fontsize = 8)
+    plt.xlabel('Filter Index')
+    plt.ylabel('Variance') # Variance of Mean weight value
+    plt.ylim(0,1e-7)
+
 
 plt.tight_layout()
 plt.savefig("variance.pdf")

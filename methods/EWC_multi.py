@@ -5,7 +5,7 @@ import torch.optim as optim
 
 from metrics.accuracy.topAccuracy import top1Accuracy
 
-def on_task_update(task_id, trainloader, model, optimizer, fisher_dict, optpar_dict, device):
+def on_task_update(task_id, trainloader, model, optimizer, fisher_dict, optpar_dict, device, layers_keywords = ""):
 
     model.train()
     optimizer.zero_grad()
@@ -26,14 +26,17 @@ def on_task_update(task_id, trainloader, model, optimizer, fisher_dict, optpar_d
 
     # gradients accumulated can be used to calculate fisher
     for name, param in model.named_parameters():
-        
-        optpar_dict[task_id][name] = param.data.clone()
-        fisher_dict[task_id][name] = param.grad.data.clone().pow(2)
+        # print("name =",name)
+        if any(keyword in name for keyword in layers_keywords):
+            pass
+        else:
+            optpar_dict[task_id][name] = param.data.clone()
+            fisher_dict[task_id][name] = param.grad.data.clone().pow(2)
 
     return fisher_dict, optpar_dict
 
 
-def train_model_ewc(model, train_loader, test_loader, device, fisher_dict, optpar_dict, num_epochs=200, ewc_lambda = 1, learning_rate=1e-2, momentum=0.9, weight_decay=1e-5 ):
+def train_model_ewc(model, layers_keywords, train_loader, test_loader, device, fisher_dict, optpar_dict, num_epochs=200, ewc_lambda = 1, learning_rate=1e-2, momentum=0.9, weight_decay=1e-5, fix_batch_noramlisation = False ):
 
     criterion = nn.CrossEntropyLoss()
 
@@ -48,6 +51,14 @@ def train_model_ewc(model, train_loader, test_loader, device, fisher_dict, optpa
 
         # Training
         model.train()
+
+        if fix_batch_noramlisation:
+            for name, module in model.named_modules():
+                if any(keyword in name for keyword in layers_keywords):
+                    # print(name)
+                    # input("press enter")
+                    if isinstance(module, nn.BatchNorm2d):
+                        module.eval()
 
         running_loss = 0
         running_corrects = 0
@@ -88,7 +99,7 @@ def train_model_ewc(model, train_loader, test_loader, device, fisher_dict, optpa
                 for name, param in model.named_parameters():
                     # print("name = ",name)
                     # print("fisher_dict = ", fisher_dict)
-                    if any(keyword in name for keyword in ["layer4","avgpool","fc", "classification_head", "rotation_head"]):
+                    if any(keyword in name for keyword in layers_keywords): #["layer4","avgpool","fc", "classification_head", "rotation_head"]):
                         pass
                         # print("Not applying fisher matrix for this as we do not care about it.")
                         # loss += (fisher * (optpar - param).pow(2)).sum() * 0

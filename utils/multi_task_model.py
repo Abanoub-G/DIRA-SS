@@ -43,29 +43,44 @@ import copy
 
 # Define a multi-task ResNet architecture
 class MultiTaskResNet(nn.Module):
-    def __init__(self, model, num_classes, num_rotation_classes=4, classification_layers=512, rotation_layers=512):
+    def __init__(self, model, num_classes, Swap_layers_starting_from, num_rotation_classes=4, classification_layers=512, rotation_layers=512):
         super(MultiTaskResNet, self).__init__()
 
         self.resnet = model
 
         self.n_features = self.resnet.fc.in_features
 
-        # self.classification_layer4 = copy.deepcopy(self.resnet.layer4)
-        # self.classification_avgpool = copy.deepcopy(self.resnet.avgpool)
-        self.classification_head = copy.deepcopy(self.resnet.fc)
+        self.n_layers_swapped = 5-Swap_layers_starting_from
 
         
+        
+        if self.n_layers_swapped >= 3:
+            self.classification_layer2  = copy.deepcopy(self.resnet.layer2)
+            self.rotation_layer2        = copy.deepcopy(self.resnet.layer2)
+
+        if self.n_layers_swapped >= 2:
+            self.classification_layer3  = copy.deepcopy(self.resnet.layer3)
+            self.rotation_layer3        = copy.deepcopy(self.resnet.layer3)
+
+        if self.n_layers_swapped >= 1:
+            self.classification_layer4  = copy.deepcopy(self.resnet.layer4)
+            self.rotation_layer4        = copy.deepcopy(self.resnet.layer4)
+
+        if self.n_layers_swapped >= 0:
+            self.classification_avgpool = copy.deepcopy(self.resnet.avgpool)
+            self.classification_head    = copy.deepcopy(self.resnet.fc)
+            self.rotation_avgpool       = copy.deepcopy(self.resnet.avgpool)
+            self.rotation_head          = nn.Linear(self.n_features, num_rotation_classes) 
+
+        # self.classification_layer2 = copy.deepcopy(self.resnet.layer2)
+        # self.classification_layer3 = copy.deepcopy(self.resnet.layer3)
+        # self.classification_layer4 = copy.deepcopy(self.resnet.layer4)
+        
+        # self.rotation_layer2  = copy.deepcopy(self.resnet.layer2)
+        # self.rotation_layer3  = copy.deepcopy(self.resnet.layer3)
         # self.rotation_layer4  = copy.deepcopy(self.resnet.layer4)
         # self.rotation_avgpool = copy.deepcopy(self.resnet.avgpool) #nn.AdaptiveAvgPool2d((1, 1))
-        self.rotation_head    = nn.Linear(self.n_features, num_rotation_classes) 
-
-        # STOPPED At checking if the running mean and standard deviation change during to training and if this is causeing an issue!!.
-
-        # self.rotation_head = nn.Sequential(
-        #                                                 nn.Linear(self.n_features,self.n_features),
-        #                                                 nn.ReLU(),
-        #                                                 nn.Linear(self.n_features, num_rotation_classes)
-        #                                                 )
+        # self.rotation_head    = nn.Linear(self.n_features, num_rotation_classes) 
 
         self.num_classificaiton_classes = num_classes
         self.num_rotation_classes = num_rotation_classes
@@ -79,16 +94,46 @@ class MultiTaskResNet(nn.Module):
 
     def use_classification_head(self):
         # Switch to the original classification layers
+        if self.n_layers_swapped >= 3:
+            self.resnet.layer2  = self.classification_layer2
+
+        if self.n_layers_swapped >= 2:
+            self.resnet.layer3  = self.classification_layer3
+
+        if self.n_layers_swapped >= 1:
+            self.resnet.layer4  = self.classification_layer4
+
+        if self.n_layers_swapped >= 0:
+            self.resnet.avgpool = self.classification_avgpool
+            self.resnet.fc      = self.classification_head
+        
+        # self.resnet.layer2  = self.classification_layer2
+        # self.resnet.layer3  = self.classification_layer3
         # self.resnet.layer4  = self.classification_layer4
         # self.resnet.avgpool = self.classification_avgpool
-        self.resnet.fc      = self.classification_head
+        # self.resnet.fc      = self.classification_head
 
 
     def use_rotation_head(self):
         # Switch to the rotation layers
+        if self.n_layers_swapped >= 3:
+            self.resnet.layer2  = self.rotation_layer2
+
+        if self.n_layers_swapped >= 2:
+            self.resnet.layer3  = self.rotation_layer3
+
+        if self.n_layers_swapped >= 1:
+            self.resnet.layer4  = self.rotation_layer4
+
+        if self.n_layers_swapped >= 0:
+            self.resnet.avgpool = self.rotation_avgpool
+            self.resnet.fc      = self.rotation_head
+        
+        # self.resnet.layer2  = self.rotation_layer2
+        # self.resnet.layer3  = self.rotation_layer3
         # self.resnet.layer4  = self.rotation_layer4
         # self.resnet.avgpool = self.rotation_avgpool
-        self.resnet.fc      = self.rotation_head
+        # self.resnet.fc      = self.rotation_head
 
 
 
@@ -110,7 +155,7 @@ def save_model(model, model_dir, model_filename):
     model_filepath = os.path.join(model_dir, model_filename)
     torch.save(model.state_dict(), model_filepath)
 
-def model_selection(model_selection_flag=0, model_dir="", model_choice="", model_variant="", saved_model_filepath="",num_classes=1, device="", mutli_selection_flag = True):
+def model_selection(model_selection_flag=0, model_dir="", model_choice="", model_variant="", saved_model_filepath="",num_classes=1, device="", mutli_selection_flag = True, Swap_layers_starting_from = 0):
     if model_selection_flag == 0:
         # Create an untrained model.
         model = create_model(model_dir, model_choice, model_variant, num_classes)
@@ -126,14 +171,14 @@ def model_selection(model_selection_flag=0, model_dir="", model_choice="", model
         # Load a pretrained model from Pytorch.
         model = torch.hub.load('pytorch/vision:v0.10.0', model_variant, pretrained=True)
         # Convert to a multi task model
-        model  = MultiTaskResNet(model, num_classes)
+        model  = MultiTaskResNet(model, num_classes, Swap_layers_starting_from)
 
     elif model_selection_flag == 2:
         # Load a local pretrained model.
         model = create_model(model_dir, model_choice, model_variant, num_classes)
         model = load_model(model=model, model_filepath=saved_model_filepath, device=device)
         if mutli_selection_flag:
-            model  = MultiTaskResNet(model, num_classes)
+            model  = MultiTaskResNet(model, num_classes, Swap_layers_starting_from)
 
     return model
 

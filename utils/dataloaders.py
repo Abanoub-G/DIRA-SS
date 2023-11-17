@@ -408,7 +408,6 @@ def auxilary_samples_dataloader_iterative(N_T, noisy_images, samples_indices_arr
         i = random.randint(0,max_num_noisy_samples)
         samples_indices_array.append(i)
 
-    print("Number of samples being used in retraining = ",len(samples_indices_array))
     selected_noisy_images_unrotated = np.take(noisy_images,samples_indices_array, axis=0)
     # selected_noisy_labels = np.take(noisy_labels,samples_indices_array, axis=0)
     
