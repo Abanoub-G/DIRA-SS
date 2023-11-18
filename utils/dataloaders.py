@@ -449,8 +449,8 @@ def auxilary_samples_dataloader_iterative(N_T, noisy_images, samples_indices_arr
 def auxilary_samples_dataloader_iterative_imagenet(N_T, test_set, samples_indices_array):
     # Get length of images
     max_num_noisy_samples = len(test_set)-1
-    print("max_num_noisy_samples = ", max_num_noisy_samples)
-    input("press enter to continue")
+    # print("max_num_noisy_samples = ", max_num_noisy_samples)
+    # input("press enter to continue")
 
     number_of_samples_to_add =  N_T - len(samples_indices_array)
 

@@ -215,7 +215,7 @@ def main():
 		param.requires_grad = True
 
 	# Train new layers in model for rotation task
-	# model_multi = train_model(model=model_multi, train_loader=trainloader_rot, test_loader=testloader_rot, device=device, learning_rate=1e-2, num_epochs=2, fix_batch_noramlisation=True)
+	model_multi = train_model(model=model_multi, train_loader=trainloader_rot, test_loader=testloader_rot, device=device, learning_rate=1e-2, num_epochs=2, fix_batch_noramlisation=True)
 
 	# Once new layers are trained set grad back to usual
 	for param in model_multi.parameters():#resnet.fc.parameters():
@@ -241,8 +241,8 @@ def main():
 
 	optimizer = optim.SGD(model_multi.parameters(), lr=0.01, momentum=0.9, weight_decay=1e-5)
 	
-	save_dict = True
-	load_dict = False
+	save_dict = False
+	load_dict = True
 
 	if load_dict == True and (DATASET_NAME == "ImageNet" or DATASET_NAME == "TinyImageNet"):
 		with open("resnet18_"+DATASET_NAME+"_fisher.pkl", 'rb') as file:
