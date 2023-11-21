@@ -142,9 +142,9 @@ def main():
 
 	zeta = 10
 
-	experiment_number = 25
+	experiment_number = 26
 	fix_batch_noramlisation = True
-	Swap_layers_starting_from = 3 # 2 : From layers 2  |  3 : From layers 3  |  4 : From layers 4  |  5 : For output layers only
+	Swap_layers_starting_from = 5 # 2 : From layers 2  |  3 : From layers 3  |  4 : From layers 4  |  5 : For output layers only
 
 	if Swap_layers_starting_from == 5:
 
@@ -241,14 +241,14 @@ def main():
 
 	optimizer = optim.SGD(model_multi.parameters(), lr=0.01, momentum=0.9, weight_decay=1e-5)
 	
-	save_dict = False
-	load_dict = True
+	save_dict = True
+	load_dict = False
 
 	if load_dict == True and (DATASET_NAME == "ImageNet" or DATASET_NAME == "TinyImageNet"):
-		with open("resnet18_"+DATASET_NAME+"_fisher.pkl", 'rb') as file:
+		with open("resnet18_"+DATASET_NAME+"_layers_frozen_from_"+str(Swap_layers_starting_from)+"_fisher.pkl", 'rb') as file:
 			fisher_dict = pickle.load(file)
 
-		with open("resnet18_"+DATASET_NAME+"_optpar.pkl", 'rb') as file:
+		with open("resnet18_"+DATASET_NAME+"_layers_frozen_from_"+str(Swap_layers_starting_from)+"_optpar.pkl", 'rb') as file:
 			optpar_dict = pickle.load(file)
 
 		print("PROGRESS: Calculated Fisher loaded")
@@ -260,10 +260,10 @@ def main():
 
 		if save_dict == True and (DATASET_NAME == "ImageNet" or DATASET_NAME == "TinyImageNet"):
 
-			with open("resnet18_"+DATASET_NAME+"_fisher.pkl", 'wb') as file:
+			with open("resnet18_"+DATASET_NAME+"_layers_frozen_from_"+str(Swap_layers_starting_from)+"_fisher.pkl", 'wb') as file:
 				pickle.dump(fisher_dict, file)
 
-			with open("resnet18_"+DATASET_NAME+"_optpar.pkl", 'wb') as file:
+			with open("resnet18_"+DATASET_NAME+"_layers_frozen_from_"+str(Swap_layers_starting_from)+"_optpar.pkl", 'wb') as file:
 				pickle.dump(optpar_dict, file)
 
 			print("PROGRESS: Saved Fisher matrix")

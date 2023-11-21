@@ -15,6 +15,10 @@ scripts/resnet18_ImageNet_fisher.pkl
 scripts/resnet18_ImageNet_optpar.pkl
 scripts/resnet18_TinyImageNet_fisher.pkl
 scripts/resnet18_TinyImageNet_optpar.pkl
+scripts/resnet18_ImageNet_layers_frozen_from_3_fisher.pkl
+scripts/resnet18_ImageNet_layers_frozen_from_3_optpar.pkl
+scripts/resnet18_ImageNet_layers_frozen_from_5_fisher.pkl
+scripts/resnet18_ImageNet_layers_frozen_from_5_optpar.pkl
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
