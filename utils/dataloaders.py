@@ -97,6 +97,7 @@ def custom_test_transform(tensor):
 
     return transformed_tensor
 
+
 def imshow(img, file_name, title=''):
     """Plot the image batch.
     """
@@ -240,8 +241,8 @@ def pytorch_dataloader(dataset_name="", dataset_dir="", images_size=32, batch_si
         small_test_set = test_set
 
     elif dataset_name =="CIFAR100": 
-        train_set = torchvision.datasets.CIFAR10(root=dataset_dir, train=True, download=True, transform=train_transform) 
-        test_set = torchvision.datasets.CIFAR10(root=dataset_dir, train=False, download=True, transform=test_transform)
+        train_set = torchvision.datasets.CIFAR100(root=dataset_dir, train=True, download=True, transform=train_transform) 
+        test_set = torchvision.datasets.CIFAR100(root=dataset_dir, train=False, download=True, transform=test_transform)
         small_test_set = test_set
 
     elif dataset_name == "TinyImageNet":
@@ -409,7 +410,6 @@ def auxilary_samples_dataloader_iterative(N_T, noisy_images, samples_indices_arr
         samples_indices_array.append(i)
 
     selected_noisy_images_unrotated = np.take(noisy_images,samples_indices_array, axis=0)
-    # selected_noisy_labels = np.take(noisy_labels,samples_indices_array, axis=0)
     
     selected_noisy_labels = []
     selected_noisy_images = []
@@ -446,6 +446,60 @@ def auxilary_samples_dataloader_iterative(N_T, noisy_images, samples_indices_arr
         # input("press eneter to continue. Look at pictures to valiate roations are happening.")
     return N_T_trainloader_c, N_T_testloader_c, samples_indices_array
 
+def auxilary_samples_dataloader_iterative_imagenet(N_T, test_set, samples_indices_array):
+    # Get length of images
+    max_num_noisy_samples = len(test_set)-1
+    # print("max_num_noisy_samples = ", max_num_noisy_samples)
+    # input("press enter to continue")
+
+    number_of_samples_to_add =  N_T - len(samples_indices_array)
+
+    for _ in range(number_of_samples_to_add): 
+        # Select a random number from the max number of images
+        i = random.randint(0,max_num_noisy_samples)
+        samples_indices_array.append(i)
+
+    selected_noisy_test_subset_unrotated = torch.utils.data.Subset(test_set, samples_indices_array)
+
+    # selected_noisy_images_unrotated = np.take(test_set,samples_indices_array)#, axis=0)
+
+    selected_noisy_labels = []
+    selected_noisy_images = []
+
+    for image, label in selected_noisy_test_subset_unrotated:
+        # Generate rotated images.
+        for rotation_label in [0, 1, 2, 3]:
+            selected_noisy_labels.append(rotation_label)
+            selected_noisy_images.append(torch.rot90(image,rotation_label, [1, 2]))
+
+    selected_noisy_labels = torch.tensor(selected_noisy_labels)
+    selected_noisy_images = torch.stack(selected_noisy_images, dim=0)
+
+    # print("selected_noisy_labels = ",selected_noisy_labels)
+
+    N_T_train_set_c = CustomTensorDataset(tensors=(selected_noisy_images, selected_noisy_labels), transform=None)
+    N_T_trainloader_c = torch.utils.data.DataLoader(N_T_train_set_c, batch_size=64, shuffle=True)
+
+    N_T_test_set_c = CustomTensorDataset(tensors=(selected_noisy_images, selected_noisy_labels), transform=None)
+    N_T_testloader_c = torch.utils.data.DataLoader(N_T_test_set_c, batch_size=64, shuffle=False)
+
+    # N_T_trainloader_c = torch.utils.data.DataLoader(N_T_train_set_c, batch_size=64, shuffle=True)
+    # N_T_testloader_c = torch.utils.data.DataLoader(N_T_test_set_c, batch_size=64, shuffle=False)
+
+    # Display some images to visualise transforms
+    show_pics_samples = True
+    if show_pics_samples == True:
+        for i, data in enumerate(N_T_trainloader_c):
+            x, y = data  
+            imshow(torchvision.utils.make_grid(x, 4), "train_transforms.png" , title='train_Transforms')
+            break
+        for i, data in enumerate(N_T_testloader_c):
+            x, y = data  
+            imshow(torchvision.utils.make_grid(x, 4), "test_transforms.png", title='test_Transforms')
+            break
+        # input("press eneter to continue. Look at pictures to valiate roations are happening.")
+    return N_T_trainloader_c, N_T_testloader_c, samples_indices_array
+
 # Custom dataset class for CIFAR-10 with rotation labels
 class CIFAR10WithRotation(Dataset):
     def __init__(self, root, train=True, download=True, transform=None, do_rotations=True):
@@ -457,6 +511,41 @@ class CIFAR10WithRotation(Dataset):
 
     def __getitem__(self, idx):
         image, label = self.cifar10[idx]
+        
+        # Randomly generate a rotation label (0, 1, 2, or 3)
+        if self.do_rotations:
+            rotation_label = np.random.randint(4)  # Randomly select 0, 1, 2, or 3
+        else:
+            rotation_label = 0
+        
+        # Apply rotation to the image based on the label
+        if rotation_label == 1:
+            image = torch.rot90(image,1, [1, 2])
+        elif rotation_label == 2:
+            image = torch.rot90(image,2, [1, 2])
+        elif rotation_label == 3:
+            image = torch.rot90(image,3, [1, 2])
+        
+        return image, rotation_label
+
+# Custom dataset class for ImageNet with rotation labels
+class ImageNetWithRotation(Dataset):
+    def __init__(self, root, train=True, transform=None, do_rotations=True):
+        if train == True:
+            self.imagenet = torchvision.datasets.ImageFolder(root=root+"/train", transform=transform)#ImageNetKaggle(dataset_root, "train", transform)
+        # self.imagenet = torchvision.datasets.ImageNet(root, split='train' if train else 'val', transform=transform)
+        
+        if train == False:
+            self.imagenet   = torchvision.datasets.ImageFolder(root=root+"/val", transform=transform)#ImageNetKaggle(dataset_root, "val", transform)
+
+        # self.cifar10 = torchvision.datasets.CIFAR10(root, train=train, download=download, transform=transform)
+        self.do_rotations = do_rotations
+
+    def __len__(self):
+        return len(self.imagenet)
+
+    def __getitem__(self, idx):
+        image, label = self.imagenet[idx]
         
         # Randomly generate a rotation label (0, 1, 2, or 3)
         if self.do_rotations:
@@ -524,25 +613,25 @@ def pytorch_rotation_dataloader(dataset_name="", dataset_dir="", images_size=32,
         train_set = CIFAR10WithRotation(root=dataset_dir, train=True, download=True, transform=train_transform) 
         test_set  = CIFAR10WithRotation(root=dataset_dir, train=False, download=True, transform=test_transform)
     
-    elif dataset_name =="CIFAR100": 
-        train_set = torchvision.datasets.CIFAR10(root=dataset_dir, train=True, download=True, transform=train_transform) 
-        test_set = torchvision.datasets.CIFAR10(root=dataset_dir, train=False, download=True, transform=test_transform)
+    # elif dataset_name =="CIFAR100": 
+    #     train_set = torchvision.datasets.CIFAR100(root=dataset_dir, train=True, download=True, transform=train_transform) 
+    #     test_set = torchvision.datasets.CIFAR100(root=dataset_dir, train=False, download=True, transform=test_transform)
 
-    elif dataset_name == "TinyImageNet":
+    # elif dataset_name == "TinyImageNet":
 
-        # train_transform = transforms.Compose([
-        #                 transforms.ToTensor(),
-        #                 ])
+    #     # train_transform = transforms.Compose([
+    #     #                 transforms.ToTensor(),
+    #     #                 ])
 
-        # test_transform = transforms.Compose([
-        #                 transforms.ToTensor(),
-        #                 ])
+    #     # test_transform = transforms.Compose([
+    #     #                 transforms.ToTensor(),
+    #     #                 ])
 
-        train_set = torchvision.datasets.ImageFolder(root=dataset_dir+"tiny-imagenet-200/train", transform=train_transform)
-        test_set = torchvision.datasets.ImageFolder(root=dataset_dir+"tiny-imagenet-200/val", transform=test_transform)
+    #     train_set = torchvision.datasets.ImageFolder(root=dataset_dir+"tiny-imagenet-200/train", transform=train_transform)
+    #     test_set = torchvision.datasets.ImageFolder(root=dataset_dir+"tiny-imagenet-200/val", transform=test_transform)
     
     elif dataset_name =="ImageNet":
-        dataset_root =  dataset_dir #"../../datasets/ImageNet/imagenet-object-localization-challenge/ILSVRC/Data/CLS-LOC"
+        # dataset_root =  dataset_dir #"../../datasets/ImageNet/imagenet-object-localization-challenge/ILSVRC/Data/CLS-LOC"
         mean = (0.485, 0.456, 0.406)
         std = (0.229, 0.224, 0.225)
 
@@ -560,8 +649,11 @@ def pytorch_rotation_dataloader(dataset_name="", dataset_dir="", images_size=32,
                         transforms.Normalize(mean, std),
                     ])
 
-        train_set  = torchvision.datasets.ImageFolder(root=dataset_root+"/train", transform=train_transform)#ImageNetKaggle(dataset_root, "train", transform)
-        test_set   = torchvision.datasets.ImageFolder(root=dataset_root+"/val", transform=test_transform)#ImageNetKaggle(dataset_root, "val", transform)
+        train_set = ImageNetWithRotation(root=dataset_dir, train=True, transform=train_transform) # Train is set to flase here because the dataset would be too big
+        test_set  = ImageNetWithRotation(root=dataset_dir, train=False, transform=test_transform)
+
+        # train_set  = torchvision.datasets.ImageFolder(root=dataset_root+"/train", transform=train_transform)#ImageNetKaggle(dataset_root, "train", transform)
+        # test_set   = torchvision.datasets.ImageFolder(root=dataset_root+"/val", transform=test_transform)#ImageNetKaggle(dataset_root, "val", transform)
 
 
     else:
@@ -574,73 +666,4 @@ def pytorch_rotation_dataloader(dataset_name="", dataset_dir="", images_size=32,
 
     return train_loader, test_loader
 
-# def pytorch_dataloader_with_rotation(dataset_name="", dataset_dir="", images_size=32, batch_size=64, do_rotations=True):
 
-#     train_transform = transforms.Compose([
-#                 transforms.Resize((images_size, images_size)),
-#                 transforms.RandomCrop(32, padding=4),
-#                 transforms.RandomHorizontalFlip(),
-#                 transforms.ToTensor(),
-#                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-#               ])
-
-#     test_transform = transforms.Compose([
-#                 transforms.Resize((images_size, images_size)),
-#                 transforms.ToTensor(),
-#                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-#               ])
-
-#     # Check which dataset to load.
-#     if dataset_name == "CIFAR10":
-#         train_set = CIFAR10WithRotation(root=dataset_dir, train=True, download=True, transform=train_transform, do_rotations = do_rotations) 
-#         test_set  = CIFAR10WithRotation(root=dataset_dir, train=False, download=True, transform=test_transform, do_rotations = do_rotations)
-    
-#     elif dataset_name =="CIFAR100": 
-#         train_set = torchvision.datasets.CIFAR10(root=dataset_dir, train=True, download=True, transform=train_transform) 
-#         test_set = torchvision.datasets.CIFAR10(root=dataset_dir, train=False, download=True, transform=test_transform)
-
-#     elif dataset_name == "TinyImageNet":
-
-#         # train_transform = transforms.Compose([
-#         #                 transforms.ToTensor(),
-#         #                 ])
-
-#         # test_transform = transforms.Compose([
-#         #                 transforms.ToTensor(),
-#         #                 ])
-
-#         train_set = torchvision.datasets.ImageFolder(root=dataset_dir+"tiny-imagenet-200/train", transform=train_transform)
-#         test_set = torchvision.datasets.ImageFolder(root=dataset_dir+"tiny-imagenet-200/val", transform=test_transform)
-    
-#     elif dataset_name =="ImageNet":
-#         dataset_root =  dataset_dir #"../../datasets/ImageNet/imagenet-object-localization-challenge/ILSVRC/Data/CLS-LOC"
-#         mean = (0.485, 0.456, 0.406)
-#         std = (0.229, 0.224, 0.225)
-
-#         train_transform = transforms.Compose([
-#                         transforms.Resize(256),
-#                         transforms.CenterCrop(224),
-#                         transforms.ToTensor(),
-#                         transforms.Normalize(mean, std),
-#                     ])
-
-#         test_transform = transforms.Compose([
-#                         transforms.Resize(256),
-#                         transforms.CenterCrop(224),
-#                         transforms.ToTensor(),
-#                         transforms.Normalize(mean, std),
-#                     ])
-
-#         train_set  = torchvision.datasets.ImageFolder(root=dataset_root+"/train", transform=train_transform)#ImageNetKaggle(dataset_root, "train", transform)
-#         test_set   = torchvision.datasets.ImageFolder(root=dataset_root+"/val", transform=test_transform)#ImageNetKaggle(dataset_root, "val", transform)
-
-
-#     else:
-#         print("ERROR: dataset name is not integrated into NETZIP yet.")
-
-
-#     train_loader = torch.utils.data.DataLoader(dataset=train_set, batch_size=64, shuffle=True)
-
-#     test_loader = torch.utils.data.DataLoader(dataset=test_set, batch_size=64, shuffle=True)
-
-#     return train_loader, test_loader
