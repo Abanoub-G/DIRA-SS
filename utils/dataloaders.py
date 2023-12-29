@@ -528,6 +528,34 @@ class CIFAR10WithRotation(Dataset):
         
         return image, rotation_label
 
+# Custom dataset class for CIFAR-100 with rotation labels
+class CIFAR100WithRotation(Dataset):
+    def __init__(self, root, train=True, download=True, transform=None, do_rotations=True):
+        self.cifar100 = torchvision.datasets.CIFAR100(root, train=train, download=download, transform=transform)
+        self.do_rotations = do_rotations
+
+    def __len__(self):
+        return len(self.cifar100)
+
+    def __getitem__(self, idx):
+        image, label = self.cifar100[idx]
+        
+        # Randomly generate a rotation label (0, 1, 2, or 3)
+        if self.do_rotations:
+            rotation_label = np.random.randint(4)  # Randomly select 0, 1, 2, or 3
+        else:
+            rotation_label = 0
+        
+        # Apply rotation to the image based on the label
+        if rotation_label == 1:
+            image = torch.rot90(image,1, [1, 2])
+        elif rotation_label == 2:
+            image = torch.rot90(image,2, [1, 2])
+        elif rotation_label == 3:
+            image = torch.rot90(image,3, [1, 2])
+        
+        return image, rotation_label
+
 # Custom dataset class for ImageNet with rotation labels
 class ImageNetWithRotation(Dataset):
     def __init__(self, root, train=True, transform=None, do_rotations=True):
@@ -613,9 +641,9 @@ def pytorch_rotation_dataloader(dataset_name="", dataset_dir="", images_size=32,
         train_set = CIFAR10WithRotation(root=dataset_dir, train=True, download=True, transform=train_transform) 
         test_set  = CIFAR10WithRotation(root=dataset_dir, train=False, download=True, transform=test_transform)
     
-    # elif dataset_name =="CIFAR100": 
-    #     train_set = torchvision.datasets.CIFAR100(root=dataset_dir, train=True, download=True, transform=train_transform) 
-    #     test_set = torchvision.datasets.CIFAR100(root=dataset_dir, train=False, download=True, transform=test_transform)
+    elif dataset_name =="CIFAR100": 
+        train_set = CIFAR100WithRotation(root=dataset_dir, train=True, download=True, transform=train_transform) 
+        test_set  = CIFAR100WithRotation(root=dataset_dir, train=False, download=True, transform=test_transform)
 
     # elif dataset_name == "TinyImageNet":
 
